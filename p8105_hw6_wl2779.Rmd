@@ -1,0 +1,153 @@
+---
+title: "HW6"
+author: "Wenyi"
+date: "12/4/2021"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(modelr)
+library(mgcv)
+```
+
+
+##problem 1
+```{r data wrangling}
+bw_df=
+  read_csv(file = "./data/birthweight.csv")%>%
+  janitor::clean_names()%>%
+  mutate(
+    babysex = recode(babysex, `1` = "male", `2` = "female"),
+    babysex = factor(babysex),
+    frace=recode(frace, `1` = "White", `2` = "Black", `3` = "Asian", `4` = "Puerto Rican", `8` = "Other", `9` = "Unknown"),
+    frace = factor(frace),
+    malform = recode(malform, `0` = "absent", `1` = "present"),
+    malform = factor(malform),
+    mrace = recode(mrace, `1` = "White", `2` = "Black", `3` = "Asian", `4` = "Puerto Rican", `8` = "Other"),
+    mrace = factor(mrace)) 
+  
+```
+
+#mdoel fitting
+```{r}
+fit= lm(bwt ~ blength+ babysex + delwt+ mheight+ppwt+ppbmi, data = bw_df)
+
+summary(fit)
+summary(fit)$coef
+coef(fit)
+
+fit %>% 
+  broom::glance()
+
+bw_df %>% 
+  modelr::add_residuals(fit) %>% 
+  ggplot(aes(x = blength, y = resid)) + geom_violin()
+```
+The model fitting process includes the hypothesized structure for the factors that underly birthweight. The guess is that the mother's weight, height and any other related (like BMI) will be associated with baby's birthweight. After guessing, check the p-value of t-test for each potential coefficient and keep the meaningful variable in the model.
+
+
+#model 1
+```{r comparing model 1}
+fit1= lm(bwt ~ blength + gaweeks, data = bw_df)
+
+summary(fit1)
+summary(fit1)$coef
+coef(fit1)
+
+fit1 %>% 
+  broom::glance()
+```
+
+#model 2
+```{r comparing model 2}
+fit2 = lm(bwt ~ bhead + blength + babysex +bhead*blength+bhead*babysex+babysex*blength+bhead*babysex*blength, data = bw_df)
+
+summary(fit2)
+summary(fit2)$coef
+coef(fit2)
+
+fit2 %>% 
+  broom::glance()
+```
+
+# Comapring model 
+```{r model comparing}
+fit= lm(bwt ~ blength+babysex + delwt+ mheight+ppwt+ppbmi, data = bw_df)
+fit1= lm(bwt ~ blength + gaweeks, data = bw_df)
+fit2 = lm(bwt ~ bhead + blength + babysex +bhead*blength+bhead*babysex+babysex*blength+bhead*babysex*blength, data = bw_df)
+
+bw_df %>% 
+  gather_predictions(fit, fit1, fit2) %>% 
+  mutate(model = fct_inorder(model)) %>% 
+  ggplot(aes(x = blength, y = bwt)) + 
+  geom_point(alpha = .5) +
+  geom_line(aes(y = pred), color = "red") + 
+  facet_grid(~model)
+
+cv_df =
+  crossv_mc(bw_df, 100) %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble))
+
+```
+Conclusion:
+The fit2 model is the better model
+
+
+##Problem2
+```{r data warngling}
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2017-01-01",
+    date_max = "2017-12-31") %>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) %>%
+  select(name, id, everything())
+```
+
+
+```{r make a plot}
+weather_df %>% 
+  ggplot(aes(x = tmin, y = tmax)) + 
+  geom_point()
+
+weather_df %>% 
+  lm(y ~ x, data = .) %>% 
+  broom::tidy()
+```
+
+```{r bootstrap}
+bootstrap_df = 
+  weather_df %>% 
+  sample_frac(size = 5000, replace = TRUE) %>% 
+  arrange(tmin)
+
+lm(tmax~tmin, data = bootstrap_df)
+```
+
+```{r function}
+boot_df = function(df) {
+  
+  sample_frac(df, size = 5000, replace = TRUE)
+  
+}
+```
+
+```{r tracking}
+boot_strap_df = 
+  tibble(
+    strap_number = 1:5000,
+    strap_sample = rerun(5000, boot_df(weather_df))
+  )
+```
+
